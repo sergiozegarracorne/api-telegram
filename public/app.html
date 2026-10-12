@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="es" class="h-full">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TeleHub · Panel de empresa</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.1.11"></script>
+  <style type="text/tailwindcss">
+    @theme {
+      --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+      --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+    }
+    @utility input { @apply w-full rounded-xl border border-white/10 bg-slate-950/60 px-4 py-2.5 text-sm outline-none ring-sky-500/40 placeholder:text-slate-600 focus:border-sky-500 focus:ring-4; }
+    @utility btn { @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition active:scale-[.98] disabled:opacity-50; }
+    @utility btn-primary { @apply bg-gradient-to-r from-sky-500 to-indigo-600 text-white shadow-lg shadow-sky-600/25 hover:brightness-110; }
+    @utility btn-ghost { @apply border border-white/10 bg-white/5 text-slate-200 hover:bg-white/10; }
+    @utility card { @apply rounded-2xl border border-white/10 bg-slate-900/60 backdrop-blur; }
+    @utility nav-link { @apply flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-400 transition hover:bg-white/5 hover:text-white; }
+    .nav-link.active { @apply bg-gradient-to-r from-sky-500/20 to-indigo-500/10 text-white ring-1 ring-sky-500/30; }
+    .scroll-thin::-webkit-scrollbar { width: 6px; }
+    .scroll-thin::-webkit-scrollbar-thumb { background: rgb(255 255 255 / .1); border-radius: 9999px; }
+  </style>
+</head>
+<body class="h-full overflow-hidden bg-slate-950 font-sans text-slate-100 antialiased">
+  <div class="pointer-events-none fixed inset-0 overflow-hidden">
+    <div class="absolute -top-48 left-1/3 h-[30rem] w-[30rem] rounded-full bg-sky-600/10 blur-3xl"></div>
+  </div>
+
+  <div class="relative flex h-full">
+    <!-- Sidebar -->
+    <aside class="hidden w-64 shrink-0 flex-col border-r border-white/10 bg-slate-950/70 p-4 backdrop-blur-xl md:flex">
+      <div class="mb-8 flex items-center gap-3 px-2">
+        <div class="grid h-10 w-10 place-items-center rounded-2xl bg-gradient-to-br from-sky-400 to-indigo-600 shadow-lg shadow-sky-500/30">
+          <svg class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor"><path d="M21.94 4.3 18.8 19.1c-.24 1.05-.86 1.31-1.74.81l-4.8-3.54-2.32 2.23c-.26.26-.47.47-.96.47l.34-4.88 8.89-8.03c.39-.34-.08-.53-.6-.19L6.62 12.9l-4.73-1.48c-1.03-.32-1.05-1.03.21-1.52L20.6 2.77c.86-.32 1.6.19 1.34 1.53Z"/></svg>
+        </div>
+        <span class="text-lg font-bold">TeleHub</span>
+      </div>
+      <nav class="space-y-1">
+        <a href="#dashboard" class="nav-link" data-view="dashboard">
+          <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 12l9-9 9 9M5 10v10h14V10"/></svg> Resumen
+        </a>
+        <a href="#inbox" class="nav-link" data-view="inbox">
+          <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          Bandeja <span id="nav-unread" class="ml-auto hidden rounded-full bg-sky-500 px-2 py-0.5 text-xs font-bold text-white"></span>
+        </a>
+        <a href="#bots" class="nav-link" data-view="bots">
+          <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="4" y="8" width="16" height="12" rx="3"/><path d="M12 8V4M8 14h.01M16 14h.01"/></svg> Bots / Números
+        </a>
+        <a href="#integration" class="nav-link" data-view="integration">
+          <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="m16 18 6-6-6-6M8 6l-6 6 6 6"/></svg> Integración API
+        </a>
+      </nav>
+      <div class="mt-auto rounded-2xl border border-white/10 bg-white/5 p-3">
+        <div class="flex items-center gap-3">
+          <div id="company-avatar" class="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-sky-500 to-indigo-500 text-sm font-bold"></div>
+          <div class="min-w-0">
+            <p id="company-name" class="truncate text-sm font-semibold"></p>
+            <p class="text-xs text-slate-500">Empresa</p>
+          </div>
+        </div>
+        <button onclick="logout()" class="btn btn-ghost mt-3 w-full !py-2">Cerrar sesión</button>
+      </div>
+    </aside>
+
+    <!-- Mobile nav -->
+    <nav class="fixed inset-x-0 bottom-0 z-40 grid grid-cols-4 border-t border-white/10 bg-slate-950/95 text-xs md:hidden">
+      <a href="#dashboard" class="nav-link flex-col !gap-1 !rounded-none" data-view="dashboard">Resumen</a>
+      <a href="#inbox" class="nav-link flex-col !gap-1 !rounded-none" data-view="inbox">Bandeja</a>
+      <a href="#bots" class="nav-link flex-col !gap-1 !rounded-none" data-view="bots">Bots</a>
+      <a href="#integration" class="nav-link flex-col !gap-1 !rounded-none" data-view="integration">API</a>
+    </nav>
+
+    <main class="flex-1 overflow-y-auto pb-16 md:pb-0">
+      <!-- ============== Resumen ============== -->
+      <section id="view-dashboard" class="view mx-auto max-w-6xl space-y-6 p-6">
+        <div>
+          <h1 class="text-2xl font-bold">Hola, <span id="hello-name"></span> 👋</h1>
+          <p class="text-sm text-slate-400">Este es el resumen de tu mensajería en Telegram.</p>
+        </div>
+        <div id="stats" class="grid grid-cols-2 gap-4 lg:grid-cols-4"></div>
+        <div class="grid gap-6 lg:grid-cols-2">
+          <div class="card p-5">
+            <div class="mb-4 flex items-center justify-between">
+              <h2 class="font-semibold">Conversaciones recientes</h2>
+              <a href="#inbox" class="text-sm text-sky-400 hover:text-sky-300">Ver bandeja →</a>
+            </div>
+            <div id="recent-chats" class="space-y-1"></div>
+          </div>
+          <div class="card p-5">
+            <div class="mb-4 flex items-center justify-between">
+              <h2 class="font-semibold">Tus bots</h2>
+              <a href="#bots" class="text-sm text-sky-400 hover:text-sky-300">Gestionar →</a>
+            </div>
+            <div id="dash-bots" class="space-y-2"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============== Bandeja ============== -->
+      <section id="view-inbox" class="view hidden h-full">
+        <div class="flex h-full">
+          <div id="chat-list-pane" class="flex w-full shrink-0 flex-col border-r border-white/10 sm:w-80">
+            <div class="space-y-3 border-b border-white/10 p-4">
+              <div class="flex items-center justify-between">
+                <h2 class="text-lg font-semibold">Bandeja</h2>
+                <button class="btn btn-primary !px-3 !py-1.5 text-xs" onclick="openModal('#modal-new')">+ Nuevo</button>
+              </div>
+              <input id="chat-search" class="input !py-2" placeholder="Buscar conversación…">
+              <select id="chat-bot-filter" class="input !py-2"><option value="">Todos los bots</option></select>
+            </div>
+            <div id="chat-list" class="scroll-thin flex-1 overflow-y-auto p-2"></div>
+          </div>
+
+          <div id="conversation-pane" class="hidden min-w-0 flex-1 flex-col sm:flex">
+            <div id="conv-empty" class="m-auto max-w-xs text-center text-slate-500">
+              <div class="mx-auto mb-4 grid h-16 w-16 place-items-center rounded-3xl bg-white/5 text-3xl">💬</div>
+              <p class="font-medium text-slate-300">Selecciona una conversación</p>
+              <p class="mt-1 text-sm">Los mensajes que lleguen a tus bots aparecerán aquí en tiempo real.</p>
+            </div>
+            <div id="conv" class="hidden h-full flex-col">
+              <div class="flex items-center gap-3 border-b border-white/10 px-5 py-3">
+                <button class="text-slate-400 sm:hidden" onclick="closeConversation()">←</button>
+                <div id="conv-avatar" class="grid h-10 w-10 place-items-center rounded-xl text-sm font-bold"></div>
+                <div class="min-w-0">
+                  <p id="conv-title" class="truncate font-semibold"></p>
+                  <p id="conv-sub" class="truncate text-xs text-slate-500"></p>
+                </div>
+              </div>
+              <div id="messages" class="scroll-thin flex-1 space-y-2 overflow-y-auto bg-[radial-gradient(ellipse_at_top,rgba(56,189,248,.06),transparent_60%)] px-5 py-4"></div>
+              <form id="composer" class="flex items-end gap-2 border-t border-white/10 p-3">
+                <textarea name="text" rows="1" required placeholder="Escribe un mensaje…" class="input scroll-thin max-h-40 resize-none"></textarea>
+                <button class="btn btn-primary h-[42px] shrink-0 !px-3" title="Enviar">
+                  <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 24 24"><path d="M3.4 20.4 21 12 3.4 3.6 3.4 10l12.6 2-12.6 2z"/></svg>
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============== Bots ============== -->
+      <section id="view-bots" class="view mx-auto hidden max-w-5xl space-y-6 p-6">
+        <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h1 class="text-2xl font-bold">Bots / Números de Telegram</h1>
+            <p class="text-sm text-slate-400">Cada bot es un "número" independiente con el que tu empresa envía y recibe mensajes.</p>
+          </div>
+        </div>
+        <form id="form-bot" class="card space-y-3 p-5">
+          <label class="block text-sm font-medium">Token del bot de Telegram</label>
+          <div class="flex flex-col gap-2 sm:flex-row">
+            <input name="token" required class="input font-mono" placeholder="123456789:AAH...">
+            <button class="btn btn-primary shrink-0">Conectar bot</button>
+          </div>
+          <p class="text-xs text-slate-500">Crea un bot hablando con <a href="https://t.me/BotFather" target="_blank" class="text-sky-400">@BotFather</a> → <code>/newbot</code> y pega aquí el token que te entrega. El token se guarda cifrado.</p>
+        </form>
+        <div id="bots-grid" class="grid gap-4 md:grid-cols-2"></div>
+      </section>
+
+      <!-- ============== Integración ============== -->
+      <section id="view-integration" class="view mx-auto hidden max-w-5xl space-y-6 p-6">
+        <div>
+          <h1 class="text-2xl font-bold">Integración API</h1>
+          <p class="text-sm text-slate-400">Conecta tu sistema (ERP, CRM, e-commerce…) para enviar y recibir mensajes.</p>
+        </div>
+
+        <div class="card space-y-4 p-5">
+          <h2 class="font-semibold">Autenticación</h2>
+          <p class="text-sm text-slate-400">Envía tu token de empresa en cada petición:</p>
+          <pre class="overflow-x-auto rounded-xl bg-slate-950 p-4 font-mono text-xs text-sky-300">Authorization: Bearer <span id="token-hint"></span>…</pre>
+          <p class="text-xs text-slate-500">Por seguridad tu token completo no se muestra aquí. Si lo perdiste, solicita uno nuevo al administrador.</p>
+        </div>
+
+        <form id="form-webhook" class="card space-y-4 p-5">
+          <div>
+            <h2 class="font-semibold">Webhook de mensajes entrantes</h2>
+            <p class="text-sm text-slate-400">Cada mensaje que reciban tus bots se enviará por <code>POST</code> a esta URL.</p>
+          </div>
+          <div class="flex flex-col gap-2 sm:flex-row">
+            <input name="webhook_url" class="input" placeholder="https://mi-sistema.com/telegram/webhook">
+            <button class="btn btn-primary shrink-0">Guardar</button>
+          </div>
+          <div>
+            <p class="mb-1.5 text-sm text-slate-300">Secreto de firma (HMAC-SHA256 en header <code class="text-sky-300">X-Signature</code>)</p>
+            <div class="flex items-center gap-2 rounded-xl border border-white/10 bg-slate-950 p-2.5">
+              <code id="webhook-secret" class="flex-1 truncate font-mono text-xs text-slate-300"></code>
+              <button type="button" class="btn btn-ghost !px-3 !py-1.5 text-xs" onclick="copyText($('#webhook-secret').textContent)">Copiar</button>
+              <button type="button" class="btn btn-ghost !px-3 !py-1.5 text-xs" onclick="regenSecret()">Regenerar</button>
+            </div>
+          </div>
+        </form>
+
+        <div class="card space-y-4 p-5">
+          <h2 class="font-semibold">Ejemplos</h2>
+          <div>
+            <p class="mb-2 text-sm text-slate-300">Enviar un mensaje de texto</p>
+            <pre id="ex-send" class="overflow-x-auto rounded-xl bg-slate-950 p-4 font-mono text-xs leading-relaxed text-slate-300"></pre>
+          </div>
+          <div>
+            <p class="mb-2 text-sm text-slate-300">Listar los últimos mensajes recibidos</p>
+            <pre id="ex-list" class="overflow-x-auto rounded-xl bg-slate-950 p-4 font-mono text-xs leading-relaxed text-slate-300"></pre>
+          </div>
+          <a href="/docs" target="_blank" class="btn btn-ghost">Ver documentación completa →</a>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Modal: nuevo mensaje -->
+  <div id="modal-new" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+    <form id="form-new" class="card w-full max-w-lg space-y-4 p-6 shadow-2xl">
+      <div class="flex items-center justify-between">
+        <h3 class="text-lg font-semibold">Nuevo mensaje</h3>
+        <button type="button" onclick="closeModal('#modal-new')" class="text-slate-400 hover:text-white">✕</button>
+      </div>
+      <label class="block"><span class="text-sm text-slate-300">Bot</span><select name="bot_id" required class="input mt-1.5"></select></label>
+      <label class="block"><span class="text-sm text-slate-300">Chat ID</span><input name="chat_id" required class="input mt-1.5 font-mono" placeholder="123456789 o @canal"></label>
+      <p class="-mt-2 text-xs text-slate-500">El usuario debe haber iniciado conversación con el bot (/start) para poder escribirle.</p>
+      <label class="block"><span class="text-sm text-slate-300">Tipo</span>
+        <select name="type" class="input mt-1.5">
+          <option value="text">Texto</option>
+          <option value="photo">Imagen (URL)</option>
+          <option value="document">Documento (URL)</option>
+        </select>
+      </label>
+      <label id="media-field" class="hidden"><span class="text-sm text-slate-300">URL del archivo</span><input name="media_url" class="input mt-1.5" placeholder="https://…"></label>
+      <label class="block"><span class="text-sm text-slate-300">Mensaje</span><textarea name="text" rows="3" class="input mt-1.5"></textarea></label>
+      <div class="flex justify-end gap-2">
+        <button type="button" class="btn btn-ghost" onclick="closeModal('#modal-new')">Cancelar</button>
+        <button class="btn btn-primary">Enviar</button>
+      </div>
+    </form>
+  </div>
+
+  <script src="/js/common.js"></script>
+  <script src="/js/app.js"></script>
+</body>
+</html>
