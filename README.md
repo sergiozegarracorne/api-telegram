@@ -20,6 +20,8 @@ API REST + panel web (Node.js, Express, SQLite y Tailwind CSS) para que **varias
 - **Multiempresa**: cada empresa solo ve sus bots, chats y mensajes.
 - **Varios bots por empresa**: cada uno con su token y su webhook propio en Telegram.
 - **Seguridad**: los tokens de empresa se guardan como hash SHA-256; los tokens de Telegram cifrados con AES-256-GCM; los webhooks de Telegram se validan con `secret_token`; los webhooks salientes van firmados con HMAC-SHA256.
+- **Multimedia**: recibe fotos, documentos, audios, notas de voz y videos (vista previa en el panel) y envía archivos adjuntos (hasta 20 MB).
+- **Webhook saliente con reintentos** (3 intentos) e historial de entregas.
 - **Recepción**: por **webhook** (producción, requiere `PUBLIC_URL` con HTTPS) o por **polling** automático (desarrollo local, sin dominio).
 
 ## Requisitos
@@ -71,7 +73,10 @@ Autenticación: `Authorization: Bearer <token de empresa>`
 | GET    | `/api/v1/chats`                              | Conversaciones (`bot_id`, `q`)       |
 | POST   | `/api/v1/chats/:id/read`                     | Marcar como leída                    |
 | GET    | `/api/v1/messages`                           | Mensajes (`bot_id`, `chat_id`, `direction`, `after_id`, `before_id`, `limit`) |
-| POST   | `/api/v1/messages/send`                      | Enviar `{ bot_id, chat_id, text, type?, media_url?, parse_mode? }` |
+| GET    | `/api/v1/messages/:id/file`                  | Descargar el archivo de un mensaje   |
+| POST   | `/api/v1/messages/send`                      | Enviar `{ bot_id, chat_id, text, type?, media_url?, parse_mode? }` (JSON) o con `file` (multipart) |
+| GET    | `/api/v1/webhook-deliveries`                 | Historial de entregas del webhook    |
+| POST   | `/api/v1/settings/test-webhook`              | Enviar un evento `ping` de prueba    |
 | PUT    | `/api/v1/settings`                           | Configurar `{ webhook_url }`         |
 | POST   | `/api/v1/settings/regenerate-webhook-secret` | Nuevo secreto de firma               |
 
@@ -83,11 +88,28 @@ curl -X POST http://localhost:3000/api/v1/messages/send \
 
 Documentación completa (incluye formato del webhook y verificación de firma en Node/PHP) en `/docs`.
 
+## Tests
+
+```bash
+npm test
+```
+
+Pruebas de integración (`node:test`) con la Bot API de Telegram simulada: autenticación, registro de bots, webhook entrante y saliente firmado, envío y descarga de archivos, aislamiento entre empresas y regeneración de tokens.
+
+## Docker
+
+```bash
+cp .env.example .env   # configura APP_KEY, PUBLIC_URL, etc.
+docker compose up -d --build
+```
+
+La base de datos se guarda en el volumen `telehub-data`.
+
 ## Producción
 
 - Define `PUBLIC_URL=https://tu-dominio.com` (Telegram exige HTTPS) y `NODE_ENV=production` (cookies `secure`).
 - Ejecuta detrás de un proxy (Nginx/Caddy) con TLS. Para SSE, desactiva el buffering en `/api/v1/stream`.
-- Usa un gestor de procesos (pm2, systemd, Docker).
+- Usa un gestor de procesos (pm2, systemd o el `docker-compose.yml` incluido). El servidor se cierra de forma ordenada con `SIGTERM`/`SIGINT`.
 - El panel usa Tailwind vía CDN (`@tailwindcss/browser`); si prefieres compilarlo, puedes migrar a la CLI de Tailwind sin cambiar las clases.
 
 ## Estructura
@@ -108,4 +130,6 @@ src/
     webhook.js     Endpoint que recibe las actualizaciones de Telegram
 public/
   index.html  admin.html  app.html  docs.html  js/
+test/
+  api.test.js      Pruebas de integración
 ```

@@ -92,6 +92,7 @@
           <tr><td><code>type</code></td><td>string</td><td><code>text</code> (por defecto), <code>photo</code> o <code>document</code>.</td></tr>
           <tr><td><code>text</code></td><td>string</td><td>Texto del mensaje o pie de foto/documento.</td></tr>
           <tr><td><code>media_url</code></td><td>string</td><td>URL pública del archivo (para <code>photo</code>/<code>document</code>).</td></tr>
+          <tr><td><code>file</code></td><td>archivo</td><td>Archivo adjunto (máx. 20 MB) enviando la petición como <code>multipart/form-data</code>. Si no indicas <code>type</code>, las imágenes JPG/PNG/WEBP se envían como foto y el resto como documento.</td></tr>
           <tr><td><code>parse_mode</code></td><td>string</td><td><code>HTML</code>, <code>Markdown</code> o <code>MarkdownV2</code>.</td></tr>
           <tr><td><code>reply_to_message_id</code></td><td>number</td><td>Responde a un mensaje concreto.</td></tr>
         </tbody>
@@ -105,6 +106,10 @@
   "type": "text", "text": "&lt;b&gt;Pedido #123&lt;/b&gt; enviado ✅",
   "telegram_message_id": 412, "status": "sent", "created_at": "2026-10-12 22:01:13"
 }</pre>
+      <h3>Enviar un archivo desde tu servidor</h3>
+      <pre class="mt-3">curl -X POST https://TU_DOMINIO/api/v1/messages/send \
+  -H "Authorization: Bearer TU_TOKEN" \
+  -F bot_id=1 -F chat_id=987654321 -F text="Tu comprobante" -F file=@factura.pdf</pre>
       <p class="mt-3">Nota: Telegram solo permite escribir a usuarios que hayan iniciado conversación con el bot (<code>/start</code>).</p>
 
       <h2 id="messages">Listar mensajes</h2>
@@ -121,6 +126,9 @@
         </tbody>
       </table>
       <pre class="mt-4">curl "https://TU_DOMINIO/api/v1/messages?direction=in&after_id=50" -H "Authorization: Bearer TU_TOKEN"</pre>
+
+      <h3><code>GET /api/v1/messages/:id/file</code></h3>
+      <p class="mt-2">Descarga el archivo (foto, documento, audio, video, nota de voz…) de un mensaje. Agrega <code>?download=1</code> para forzar la descarga. Telegram limita estas descargas a 20 MB.</p>
 
       <h2 id="chats">Conversaciones</h2>
       <h3><code>GET /api/v1/chats</code></h3>
@@ -142,6 +150,7 @@ X-Signature: 5d41402abc4b2a76b9719d911017c592...   (HMAC-SHA256 del body con tu 
   "chat":    { "id": 7, "chat_id": "987654321", "title": "Ana Pérez", "username": "anaperez", ... },
   "bot":     { "id": 1, "name": "Ventas Acme", "username": "acme_ventas_bot", ... }
 }</pre>
+      <p class="mt-3">Si tu servidor no responde con un código 2xx en 10 segundos, se reintenta hasta 3 veces (tras 1 s y 4 s). Consulta el historial con <code>GET /api/v1/webhook-deliveries</code> y envía un evento <code>ping</code> de prueba con <code>POST /api/v1/settings/test-webhook</code>.</p>
       <h3>Verificar la firma</h3>
       <pre class="mt-3">// Node.js
 const sig = crypto.createHmac('sha256', WEBHOOK_SECRET).update(rawBody).digest('hex');

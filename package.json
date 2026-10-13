@@ -1,12 +1,13 @@
 {
   "name": "api-telegram",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "API multiempresa para enviar y recibir mensajes de Telegram",
   "main": "src/server.js",
   "type": "commonjs",
   "scripts": {
     "start": "node src/server.js",
-    "dev": "node --watch src/server.js"
+    "dev": "node --watch src/server.js",
+    "test": "node --test test/*.test.js"
   },
   "engines": {
     "node": ">=20"
@@ -17,6 +18,7 @@
     "cookie-parser": "^1.4.7",
     "dotenv": "^18.0.7",
     "express": "^5.3.0",
-    "express-rate-limit": "^8.7.1"
+    "express-rate-limit": "^8.7.1",
+    "multer": "^2.4.0"
   }
 }

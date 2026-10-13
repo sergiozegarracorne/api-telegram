@@ -35,6 +35,9 @@
       <div class="flex items-center gap-3">
         <a href="/docs" target="_blank" class="btn btn-ghost hidden sm:inline-flex">Docs API</a>
         <span id="admin-email" class="hidden text-sm text-slate-400 md:block"></span>
+        <button onclick="openModal('#modal-password')" class="btn btn-ghost" title="Cambiar contraseña">
+          <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+        </button>
         <button onclick="logout()" class="btn btn-ghost">Salir</button>
       </div>
     </div>
@@ -120,6 +123,22 @@
       </div>
       <div id="bots-list" class="space-y-2"></div>
     </div>
+  </div>
+
+  <!-- Modal: cambiar contraseña -->
+  <div id="modal-password" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+    <form id="form-password" class="card w-full max-w-md space-y-4 p-6 shadow-2xl">
+      <div class="flex items-center justify-between">
+        <h3 class="text-lg font-semibold">Cambiar contraseña</h3>
+        <button type="button" onclick="closeModal('#modal-password')" class="text-slate-400 hover:text-white">✕</button>
+      </div>
+      <label class="block"><span class="text-sm text-slate-300">Contraseña actual</span><input name="current_password" type="password" required autocomplete="current-password" class="input mt-1.5"></label>
+      <label class="block"><span class="text-sm text-slate-300">Nueva contraseña (mín. 8 caracteres)</span><input name="new_password" type="password" required minlength="8" autocomplete="new-password" class="input mt-1.5"></label>
+      <div class="flex justify-end gap-2 pt-2">
+        <button type="button" class="btn btn-ghost" onclick="closeModal('#modal-password')">Cancelar</button>
+        <button class="btn btn-primary">Actualizar</button>
+      </div>
+    </form>
   </div>
 
   <script src="/js/common.js"></script>

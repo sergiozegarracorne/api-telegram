@@ -1,0 +1,15 @@
+services:
+  telehub:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      DB_PATH: /app/data/app.db
+    ports:
+      - "3000:3000"
+    volumes:
+      - telehub-data:/app/data
+
+volumes:
+  telehub-data:

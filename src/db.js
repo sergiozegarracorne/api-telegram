@@ -80,9 +80,28 @@ CREATE TABLE IF NOT EXISTS messages (
   created_at          TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS webhook_deliveries (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  company_id    INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  event         TEXT NOT NULL,
+  url           TEXT NOT NULL,
+  status_code   INTEGER,
+  success       INTEGER NOT NULL DEFAULT 0,
+  attempts      INTEGER NOT NULL DEFAULT 0,
+  error         TEXT,
+  duration_ms   INTEGER,
+  created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE INDEX IF NOT EXISTS idx_messages_company ON messages(company_id, id);
+CREATE INDEX IF NOT EXISTS idx_deliveries_company ON webhook_deliveries(company_id, id);
 CREATE INDEX IF NOT EXISTS idx_messages_chat ON messages(chat_ref, id);
 CREATE INDEX IF NOT EXISTS idx_chats_company ON chats(company_id, last_message_at);
 `);
+
+// Migraciones ligeras para bases creadas con versiones anteriores.
+const hasColumn = (table, col) => db.prepare(`PRAGMA table_info(${table})`).all().some((c) => c.name === col);
+if (!hasColumn('messages', 'file_id')) db.exec('ALTER TABLE messages ADD COLUMN file_id TEXT');
+if (!hasColumn('messages', 'file_name')) db.exec('ALTER TABLE messages ADD COLUMN file_name TEXT');
 
 module.exports = db;

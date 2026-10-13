@@ -38,13 +38,32 @@ app.use('/api', (req, res) => res.status(404).json({ error: 'Ruta no encontrada'
 
 // eslint-disable-next-line no-unused-vars
 app.use((err, req, res, next) => {
+  if (err.name === 'MulterError') {
+    return res.status(err.code === 'LIMIT_FILE_SIZE' ? 413 : 422).json({ error: err.code === 'LIMIT_FILE_SIZE' ? 'El archivo supera el límite de 20 MB' : err.message });
+  }
   const status = err.status || err.statusCode || 500;
   if (status >= 500) console.error(err);
   res.status(status).json({ error: status >= 500 && !err.expose && !(err instanceof telegram.TelegramError) ? 'Error interno del servidor' : err.message });
 });
 
-app.listen(config.port, async () => {
-  console.log(`[server] Escuchando en http://localhost:${config.port}`);
-  console.log(`[server] Modo Telegram: ${config.publicUrl ? `webhook (${config.publicUrl})` : 'polling (sin PUBLIC_URL)'}`);
-  await telegram.bootAllBots();
-});
+module.exports = app;
+
+if (require.main === module) {
+  const server = app.listen(config.port, async () => {
+    console.log(`[server] Escuchando en http://localhost:${config.port}`);
+    console.log(`[server] Modo Telegram: ${config.publicUrl ? `webhook (${config.publicUrl})` : 'polling (sin PUBLIC_URL)'}`);
+    await telegram.bootAllBots();
+  });
+
+  const shutdown = (signal) => {
+    console.log(`[server] ${signal} recibido, cerrando…`);
+    telegram.stopAllPolling();
+    server.close(() => {
+      db.close();
+      process.exit(0);
+    });
+    setTimeout(() => process.exit(0), 5000).unref();
+  };
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
+}

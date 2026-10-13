@@ -3,11 +3,12 @@ window.$ = (sel, root = document) => root.querySelector(sel);
 window.$$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 
 window.api = async function api(url, { method = 'GET', body } = {}) {
+  const isForm = body instanceof FormData;
   const res = await fetch(url, {
     method,
     credentials: 'same-origin',
-    headers: body ? { 'Content-Type': 'application/json' } : {},
-    body: body ? JSON.stringify(body) : undefined,
+    headers: body && !isForm ? { 'Content-Type': 'application/json' } : {},
+    body: isForm ? body : body ? JSON.stringify(body) : undefined,
   });
   const data = await res.json().catch(() => ({}));
   if (res.status === 401 && !url.startsWith('/auth/')) {

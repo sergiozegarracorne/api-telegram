@@ -1,4 +1,5 @@
 const express = require('express');
+const multer = require('multer');
 const db = require('../db');
 const { requireCompany } = require('../auth');
 const { randomHex } = require('../security');
@@ -7,6 +8,9 @@ const telegram = require('../telegram');
 
 const router = express.Router();
 router.use(requireCompany);
+
+// Archivos adjuntos en memoria (límite de 20 MB).
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024, files: 1 } });
 
 const ownBot = (req) => db.prepare('SELECT * FROM bots WHERE id = ? AND company_id = ?').get(req.params.id, req.company.id);
 
@@ -40,6 +44,17 @@ router.put('/settings', (req, res) => {
   if (url && !/^https?:\/\/.+/i.test(url)) return res.status(422).json({ error: 'webhook_url debe ser una URL http(s) válida' });
   db.prepare('UPDATE companies SET webhook_url = ? WHERE id = ?').run(url || null, req.company.id);
   res.json({ ok: true, webhook_url: url || null });
+});
+
+router.post('/settings/test-webhook', async (req, res) => {
+  if (!req.company.webhook_url) return res.status(422).json({ error: 'Primero configura una webhook_url' });
+  const delivery = await telegram.deliverWebhook(req.company.id, 'ping', { message: 'Prueba de webhook desde TeleHub' }, { attempts: 1 });
+  res.json(delivery);
+});
+
+router.get('/webhook-deliveries', (req, res) => {
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 100);
+  res.json(db.prepare(`SELECT * FROM webhook_deliveries WHERE company_id = ? ORDER BY id DESC LIMIT ${limit}`).all(req.company.id));
 });
 
 router.post('/settings/regenerate-webhook-secret', (req, res) => {
@@ -126,7 +141,19 @@ router.get('/messages', (req, res) => {
   res.json(rows.reverse().map(telegram.publicMessage));
 });
 
-router.post('/messages/send', async (req, res) => {
+router.get('/messages/:id/file', async (req, res) => {
+  const file = await telegram.downloadFile(req.company.id, req.params.id);
+  const disposition = req.query.download ? 'attachment' : 'inline';
+  res.set({
+    'Content-Type': file.contentType,
+    'Content-Disposition': `${disposition}; filename*=UTF-8''${encodeURIComponent(file.fileName)}`,
+    'Cache-Control': 'private, max-age=3600',
+  });
+  res.send(file.body);
+});
+
+// Acepta JSON o multipart/form-data (campo "file" para adjuntar un archivo).
+router.post('/messages/send', upload.single('file'), async (req, res) => {
   const { bot_id, chat_id, type, text, media_url, parse_mode, reply_to_message_id } = req.body || {};
   let botId = bot_id;
   if (!botId) {
@@ -136,7 +163,9 @@ router.post('/messages/send', async (req, res) => {
     botId = bots[0].id;
   }
   try {
-    const message = await telegram.sendMessage(req.company.id, botId, chat_id, { type, text, media_url, parse_mode, reply_to_message_id });
+    const message = await telegram.sendMessage(req.company.id, botId, chat_id, {
+      type: type || undefined, text, media_url, parse_mode, reply_to_message_id, file: req.file,
+    });
     res.status(201).json(message);
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message, message: err.messageRecord || null });

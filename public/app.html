@@ -129,8 +129,16 @@
                 </div>
               </div>
               <div id="messages" class="scroll-thin flex-1 space-y-2 overflow-y-auto bg-[radial-gradient(ellipse_at_top,rgba(56,189,248,.06),transparent_60%)] px-5 py-4"></div>
+              <div id="attachment" class="hidden items-center gap-2 border-t border-white/10 bg-sky-500/5 px-4 py-2 text-sm">
+                <span>📎</span><span id="attachment-name" class="flex-1 truncate text-slate-300"></span>
+                <button type="button" onclick="clearAttachment()" class="text-slate-400 hover:text-white">✕</button>
+              </div>
               <form id="composer" class="flex items-end gap-2 border-t border-white/10 p-3">
-                <textarea name="text" rows="1" required placeholder="Escribe un mensaje…" class="input scroll-thin max-h-40 resize-none"></textarea>
+                <input type="file" name="file" id="composer-file" class="hidden">
+                <button type="button" onclick="$('#composer-file').click()" class="btn btn-ghost h-[42px] shrink-0 !px-3" title="Adjuntar archivo">
+                  <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+                </button>
+                <textarea name="text" rows="1" placeholder="Escribe un mensaje…" class="input scroll-thin max-h-40 resize-none"></textarea>
                 <button class="btn btn-primary h-[42px] shrink-0 !px-3" title="Enviar">
                   <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 24 24"><path d="M3.4 20.4 21 12 3.4 3.6 3.4 10l12.6 2-12.6 2z"/></svg>
                 </button>
@@ -192,11 +200,33 @@
           </div>
         </form>
 
+        <div class="card p-5">
+          <div class="mb-4 flex items-center justify-between gap-3">
+            <div>
+              <h2 class="font-semibold">Entregas recientes del webhook</h2>
+              <p class="text-sm text-slate-400">Se reintenta hasta 3 veces si tu servidor no responde 2xx.</p>
+            </div>
+            <button type="button" onclick="testWebhook()" class="btn btn-ghost shrink-0 !py-2 text-xs">Enviar prueba</button>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-sm">
+              <thead class="text-xs uppercase tracking-wide text-slate-500">
+                <tr><th class="py-2 pr-4 font-medium">Fecha</th><th class="py-2 pr-4 font-medium">Evento</th><th class="py-2 pr-4 font-medium">Resultado</th><th class="py-2 pr-4 font-medium">Intentos</th><th class="py-2 font-medium">Tiempo</th></tr>
+              </thead>
+              <tbody id="deliveries" class="divide-y divide-white/5"></tbody>
+            </table>
+          </div>
+        </div>
+
         <div class="card space-y-4 p-5">
           <h2 class="font-semibold">Ejemplos</h2>
           <div>
             <p class="mb-2 text-sm text-slate-300">Enviar un mensaje de texto</p>
             <pre id="ex-send" class="overflow-x-auto rounded-xl bg-slate-950 p-4 font-mono text-xs leading-relaxed text-slate-300"></pre>
+          </div>
+          <div>
+            <p class="mb-2 text-sm text-slate-300">Enviar un archivo (multipart)</p>
+            <pre id="ex-file" class="overflow-x-auto rounded-xl bg-slate-950 p-4 font-mono text-xs leading-relaxed text-slate-300"></pre>
           </div>
           <div>
             <p class="mb-2 text-sm text-slate-300">Listar los últimos mensajes recibidos</p>
@@ -225,7 +255,10 @@
           <option value="document">Documento (URL)</option>
         </select>
       </label>
-      <label id="media-field" class="hidden"><span class="text-sm text-slate-300">URL del archivo</span><input name="media_url" class="input mt-1.5" placeholder="https://…"></label>
+      <div id="media-field" class="hidden space-y-2">
+        <label class="block"><span class="text-sm text-slate-300">Subir archivo</span><input name="file" type="file" class="input mt-1.5 file:mr-3 file:rounded-lg file:border-0 file:bg-sky-500/20 file:px-3 file:py-1 file:text-sky-300"></label>
+        <label class="block"><span class="text-sm text-slate-300">…o URL pública del archivo</span><input name="media_url" class="input mt-1.5" placeholder="https://…"></label>
+      </div>
       <label class="block"><span class="text-sm text-slate-300">Mensaje</span><textarea name="text" rows="3" class="input mt-1.5"></textarea></label>
       <div class="flex justify-end gap-2">
         <button type="button" class="btn btn-ghost" onclick="closeModal('#modal-new')">Cancelar</button>

@@ -1,4 +1,5 @@
-const state = { me: null, bots: [], chats: [], current: null };
+const state = { me: null, bots: [], chats: [], current: null, oldestId: null, hasMore: false, loadingOlder: false };
+const PAGE = 50;
 
 const statusBadge = (s) => ({
   connected: '<span class="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 px-2.5 py-0.5 text-xs font-medium text-emerald-300"><span class="h-1.5 w-1.5 rounded-full bg-emerald-400"></span>Conectado</span>',
@@ -105,16 +106,37 @@ function renderChatList() {
   $('#chat-list').innerHTML = state.chats.map(chatItem).join('') || emptyText('Sin conversaciones todavía.<br>Escribe a tu bot desde Telegram para comenzar.');
 }
 
+function renderMedia(m) {
+  if (m.type === 'text') return '';
+  const src = m.file_id ? `/api/v1/messages/${m.id}/file` : m.media_url;
+  if (src && (m.type === 'photo' || m.type === 'sticker')) {
+    return `<a href="${esc(src)}" target="_blank"><img src="${esc(src)}" loading="lazy" alt="" class="mb-1 max-h-72 rounded-xl object-cover ${m.type === 'sticker' ? 'w-32 bg-transparent' : 'w-full'}"></a>`;
+  }
+  if (src && (m.type === 'voice' || m.type === 'audio')) return `<audio controls preload="none" src="${esc(src)}" class="mb-1 w-64 max-w-full"></audio>`;
+  if (src && m.type === 'video') return `<video controls preload="metadata" src="${esc(src)}" class="mb-1 max-h-72 w-full rounded-xl"></video>`;
+  if (src) {
+    const name = m.file_name || m.media_url?.split('/').pop() || 'archivo';
+    const href = m.file_id ? `${src}?download=1` : src;
+    return `<a href="${esc(href)}" target="_blank" class="mb-1 flex items-center gap-3 rounded-xl bg-black/20 p-3 hover:bg-black/30">
+      <span class="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-white/10">📎</span>
+      <span class="min-w-0"><span class="block truncate text-sm font-medium">${esc(name)}</span><span class="text-xs opacity-70">Descargar</span></span></a>`;
+  }
+  if (m.type === 'location') {
+    return `<a href="https://maps.google.com/?q=${encodeURIComponent(m.text)}" target="_blank" class="mb-1 block text-sm underline">📍 Ver ubicación</a>`;
+  }
+  return `<p class="mb-1 text-xs opacity-80">${typeIcon[m.type] || ''} ${esc(m.type)}</p>`;
+}
+
 function bubble(m) {
   const out = m.direction === 'out';
   const failed = m.status === 'failed';
-  const media = m.type !== 'text' ? `<p class="mb-1 text-xs opacity-80">${typeIcon[m.type] || ''} ${esc(m.type)}${m.media_url ? ` · <a href="${esc(m.media_url)}" target="_blank" class="underline">abrir</a>` : ''}</p>` : '';
+  const media = renderMedia(m);
   return `
     <div class="flex ${out ? 'justify-end' : 'justify-start'}" data-mid="${m.id}">
       <div class="max-w-[75%] rounded-2xl px-4 py-2 shadow-sm ${out ? (failed ? 'rounded-br-md bg-rose-600/80' : 'rounded-br-md bg-gradient-to-br from-sky-500 to-indigo-600') : 'rounded-bl-md bg-slate-800'}">
         ${!out && m.sender_name ? `<p class="mb-0.5 text-xs font-semibold text-sky-300">${esc(m.sender_name)}</p>` : ''}
         ${media}
-        ${m.text ? `<p class="whitespace-pre-wrap break-words text-sm">${esc(m.text)}</p>` : ''}
+        ${m.text && m.type !== 'location' ? `<p class="whitespace-pre-wrap break-words text-sm">${esc(m.text)}</p>` : ''}
         <p class="mt-1 text-right text-[10px] ${out ? 'text-white/70' : 'text-slate-500'}">${fmtTime(m.created_at)}${out ? (failed ? ` · ⚠ ${esc(m.error || 'falló')}` : ' · ✓') : ''}</p>
       </div>
     </div>`;
@@ -137,9 +159,14 @@ async function openChat(id) {
   $('#conv-avatar').className = `grid h-10 w-10 place-items-center rounded-xl text-sm font-bold bg-gradient-to-br ${avatarColor(chat.chat_id)}`;
   $('#conv-avatar').textContent = initials(chat.title || chat.chat_id);
 
-  const msgs = await api(`/api/v1/messages?chat=${id}&limit=100`);
-  $('#messages').innerHTML = msgs.map(bubble).join('');
+  clearAttachment();
+  const msgs = await api(`/api/v1/messages?chat=${id}&limit=${PAGE}`);
+  state.oldestId = msgs[0]?.id ?? null;
+  state.hasMore = msgs.length === PAGE;
+  $('#messages').innerHTML = olderMarker() + msgs.map(bubble).join('');
   scrollBottom();
+  // Las imágenes cargan después: vuelve a bajar cuando terminen.
+  $$('#messages img').forEach((img) => img.addEventListener('load', scrollBottom, { once: true }));
 
   if (chat.unread) {
     await api(`/api/v1/chats/${id}/read`, { method: 'POST' });
@@ -148,6 +175,28 @@ async function openChat(id) {
     loadMe();
   }
 }
+
+const olderMarker = () => (state.hasMore
+  ? '<div id="older" class="py-2 text-center"><button onclick="loadOlder()" class="rounded-full bg-white/5 px-3 py-1 text-xs text-slate-400 hover:bg-white/10">Cargar mensajes anteriores</button></div>'
+  : '<p id="older" class="py-2 text-center text-xs text-slate-600">Inicio de la conversación</p>');
+
+async function loadOlder() {
+  if (!state.current || !state.hasMore || state.loadingOlder) return;
+  state.loadingOlder = true;
+  const box = $('#messages');
+  const prevHeight = box.scrollHeight;
+  try {
+    const msgs = await api(`/api/v1/messages?chat=${state.current.id}&before_id=${state.oldestId}&limit=${PAGE}`);
+    state.hasMore = msgs.length === PAGE;
+    if (msgs.length) state.oldestId = msgs[0].id;
+    $('#older').remove();
+    box.insertAdjacentHTML('afterbegin', olderMarker() + msgs.map(bubble).join(''));
+    box.scrollTop = box.scrollHeight - prevHeight;
+  } finally {
+    state.loadingOlder = false;
+  }
+}
+$('#messages').addEventListener('scroll', (e) => { if (e.target.scrollTop < 60) loadOlder(); });
 
 function closeConversation() {
   state.current = null;
@@ -170,16 +219,41 @@ composer.text.addEventListener('input', () => {
   composer.text.style.height = 'auto';
   composer.text.style.height = composer.text.scrollHeight + 'px';
 });
+function clearAttachment() {
+  $('#composer-file').value = '';
+  $('#attachment').classList.add('hidden');
+  $('#attachment').classList.remove('flex');
+}
+$('#composer-file').addEventListener('change', () => {
+  const file = $('#composer-file').files[0];
+  if (!file) return clearAttachment();
+  $('#attachment-name').textContent = `${file.name} (${(file.size / 1024).toFixed(0)} KB)`;
+  $('#attachment').classList.remove('hidden');
+  $('#attachment').classList.add('flex');
+  composer.text.focus();
+});
+
 composer.addEventListener('submit', async (e) => {
   e.preventDefault();
   const text = composer.text.value.trim();
-  if (!text || !state.current) return;
+  const file = $('#composer-file').files[0];
+  if ((!text && !file) || !state.current) return;
+  const body = new FormData();
+  body.append('bot_id', state.current.bot_id);
+  body.append('chat_id', state.current.chat_id);
+  if (text) body.append('text', text);
+  if (file) body.append('file', file);
   composer.text.value = '';
   composer.text.style.height = 'auto';
+  clearAttachment();
+  const btn = composer.querySelector('button:last-child');
+  btn.disabled = true;
   try {
-    await api('/api/v1/messages/send', { method: 'POST', body: { bot_id: state.current.bot_id, chat_id: state.current.chat_id, text } });
+    await api('/api/v1/messages/send', { method: 'POST', body });
   } catch (err) {
     toast(err.message, 'error');
+  } finally {
+    btn.disabled = false;
   }
 });
 
@@ -191,7 +265,9 @@ const formNew = $('#form-new');
 formNew.type.addEventListener('change', () => $('#media-field').classList.toggle('hidden', formNew.type.value === 'text'));
 formNew.addEventListener('submit', async (e) => {
   e.preventDefault();
-  const body = Object.fromEntries(new FormData(formNew));
+  const body = new FormData(formNew);
+  if (body.get('type') === 'text') body.delete('file');
+  if (!body.get('file')?.size) body.delete('file');
   try {
     await api('/api/v1/messages/send', { method: 'POST', body });
     toast('Mensaje enviado');
@@ -285,6 +361,11 @@ function renderIntegration() {
   -H "Authorization: Bearer TU_TOKEN" \\
   -H "Content-Type: application/json" \\
   -d '{"bot_id": ${botId}, "chat_id": "123456789", "text": "Hola desde mi sistema 👋"}'`;
+  $('#ex-file').textContent = `curl -X POST ${origin}/api/v1/messages/send \\
+  -H "Authorization: Bearer TU_TOKEN" \\
+  -F bot_id=${botId} -F chat_id=123456789 \\
+  -F text="Tu comprobante" -F file=@factura.pdf`;
+  loadDeliveries();
   $('#ex-list').textContent = `curl ${origin}/api/v1/messages?direction=in&limit=20 \\
   -H "Authorization: Bearer TU_TOKEN"`;
 }
@@ -299,6 +380,34 @@ $('#form-webhook').addEventListener('submit', async (e) => {
     toast(err.message, 'error');
   }
 });
+
+function deliveryRow(d) {
+  const ok = d.success;
+  return `<tr>
+    <td class="py-2.5 pr-4 text-slate-400">${fmtDate(d.created_at)}</td>
+    <td class="py-2.5 pr-4"><code class="text-xs text-slate-300">${esc(d.event)}</code></td>
+    <td class="py-2.5 pr-4">${ok
+      ? `<span class="rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs text-emerald-300">${d.status_code} OK</span>`
+      : `<span class="rounded-full bg-rose-500/15 px-2 py-0.5 text-xs text-rose-300" title="${esc(d.error)}">${esc(d.error || 'Error')}</span>`}</td>
+    <td class="py-2.5 pr-4 text-slate-400">${d.attempts}</td>
+    <td class="py-2.5 text-slate-400">${d.duration_ms} ms</td>
+  </tr>`;
+}
+
+async function loadDeliveries() {
+  const rows = await api('/api/v1/webhook-deliveries?limit=15');
+  $('#deliveries').innerHTML = rows.map(deliveryRow).join('')
+    || '<tr><td colspan="5" class="py-6 text-center text-slate-500">Sin entregas todavía.</td></tr>';
+}
+
+async function testWebhook() {
+  try {
+    const d = await api('/api/v1/settings/test-webhook', { method: 'POST' });
+    toast(d.success ? `Webhook respondió ${d.status_code}` : `Falló: ${d.error}`, d.success ? 'success' : 'error');
+  } catch (err) {
+    toast(err.message, 'error');
+  }
+}
 
 async function regenSecret() {
   if (!confirm('¿Regenerar el secreto? Deberás actualizarlo en tu sistema.')) return;
@@ -332,6 +441,10 @@ function connectStream() {
       toast(`Nuevo mensaje de ${message.sender_name || chat?.title || 'Telegram'}`, 'info');
       updateUnread((Number($('#nav-unread').textContent) || 0) + 1);
     }
+  });
+
+  es.addEventListener('delivery', () => {
+    if (location.hash === '#integration') loadDeliveries();
   });
 
   es.addEventListener('bot', (e) => {

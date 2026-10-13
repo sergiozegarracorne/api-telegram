@@ -144,6 +144,18 @@ async function showBots(id) {
   openModal('#modal-bots');
 }
 
+$('#form-password').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  try {
+    await api('/api/admin/password', { method: 'POST', body: Object.fromEntries(new FormData(e.target)) });
+    toast('Contraseña actualizada');
+    e.target.reset();
+    closeModal('#modal-password');
+  } catch (err) {
+    toast(err.message, 'error');
+  }
+});
+
 let searchTimer;
 $('#search').addEventListener('input', () => {
   clearTimeout(searchTimer);

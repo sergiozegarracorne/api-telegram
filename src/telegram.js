@@ -18,12 +18,13 @@ class TelegramError extends Error {
 /* ------------------------------------------------------------------ */
 
 async function callApi(token, method, params = {}, { signal } = {}) {
+  const isForm = params instanceof FormData;
   let res;
   try {
     res = await fetch(`${API_BASE}/bot${token}/${method}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(params),
+      headers: isForm ? undefined : { 'Content-Type': 'application/json' },
+      body: isForm ? params : JSON.stringify(params),
       signal,
     });
   } catch (err) {
@@ -157,6 +158,10 @@ function startPolling(botId) {
   })();
 }
 
+function stopAllPolling() {
+  for (const id of [...pollers.keys()]) stopPolling(id);
+}
+
 function stopPolling(botId) {
   const controller = pollers.get(botId);
   if (controller) {
@@ -170,13 +175,17 @@ function stopPolling(botId) {
 /* ------------------------------------------------------------------ */
 
 function describeMessage(msg) {
+  const caption = msg.caption || '';
   if (msg.text) return { type: 'text', text: msg.text };
-  if (msg.photo) return { type: 'photo', text: msg.caption || '' };
-  if (msg.document) return { type: 'document', text: msg.caption || msg.document.file_name || '' };
-  if (msg.voice) return { type: 'voice', text: '' };
-  if (msg.audio) return { type: 'audio', text: msg.caption || '' };
-  if (msg.video) return { type: 'video', text: msg.caption || '' };
-  if (msg.sticker) return { type: 'sticker', text: msg.sticker.emoji || '' };
+  if (msg.photo) {
+    const best = msg.photo[msg.photo.length - 1];
+    return { type: 'photo', text: caption, file_id: best.file_id, file_name: 'foto.jpg' };
+  }
+  if (msg.document) return { type: 'document', text: caption, file_id: msg.document.file_id, file_name: msg.document.file_name || 'archivo' };
+  if (msg.voice) return { type: 'voice', text: '', file_id: msg.voice.file_id, file_name: 'nota-de-voz.ogg' };
+  if (msg.audio) return { type: 'audio', text: caption, file_id: msg.audio.file_id, file_name: msg.audio.file_name || 'audio.mp3' };
+  if (msg.video) return { type: 'video', text: caption, file_id: msg.video.file_id, file_name: msg.video.file_name || 'video.mp4' };
+  if (msg.sticker) return { type: 'sticker', text: msg.sticker.emoji || '', file_id: msg.sticker.is_animated || msg.sticker.is_video ? null : msg.sticker.file_id, file_name: 'sticker.webp' };
   if (msg.location) return { type: 'location', text: `${msg.location.latitude},${msg.location.longitude}` };
   if (msg.contact) return { type: 'contact', text: `${msg.contact.first_name} ${msg.contact.phone_number}` };
   return { type: 'other', text: '' };
@@ -212,40 +221,94 @@ async function handleUpdate(bot, update) {
   const msg = update.message || update.edited_message || update.channel_post;
   if (!msg) return;
 
-  const { type, text } = describeMessage(msg);
+  const { type, text, file_id = null, file_name = null } = describeMessage(msg);
   const at = new Date(msg.date * 1000).toISOString().replace('T', ' ').slice(0, 19);
   const chat = upsertChat(bot, msg.chat, text || `[${type}]`, at);
 
   const info = db.prepare(`
-    INSERT INTO messages (company_id, bot_id, chat_ref, chat_id, direction, type, text, telegram_message_id, sender_name, status, raw, created_at)
-    VALUES (?, ?, ?, ?, 'in', ?, ?, ?, ?, 'received', ?, ?)
-  `).run(bot.company_id, bot.id, chat.id, String(msg.chat.id), type, text, msg.message_id, fullName(msg.from || msg.chat), JSON.stringify(msg), at);
+    INSERT INTO messages (company_id, bot_id, chat_ref, chat_id, direction, type, text, file_id, file_name, telegram_message_id, sender_name, status, raw, created_at)
+    VALUES (?, ?, ?, ?, 'in', ?, ?, ?, ?, ?, ?, 'received', ?, ?)
+  `).run(bot.company_id, bot.id, chat.id, String(msg.chat.id), type, text, file_id, file_name, msg.message_id, fullName(msg.from || msg.chat), JSON.stringify(msg), at);
 
   const message = db.prepare('SELECT * FROM messages WHERE id = ?').get(info.lastInsertRowid);
   const payload = { message: publicMessage(message), chat, bot: publicBot(bot) };
   emitToCompany(bot.company_id, 'message', payload);
-  forwardToCompany(bot.company_id, payload).catch(() => {});
+  deliverWebhook(bot.company_id, 'message.received', payload).catch(() => {});
 }
 
-/** Reenvía el mensaje entrante al webhook configurado por la empresa (firmado con HMAC-SHA256). */
-async function forwardToCompany(companyId, payload) {
+/**
+ * Envía un evento al webhook configurado por la empresa, firmado con HMAC-SHA256.
+ * Reintenta hasta 3 veces (1s, 4s) y registra el resultado en webhook_deliveries.
+ */
+async function deliverWebhook(companyId, event, payload, { attempts = 3 } = {}) {
   const company = db.prepare('SELECT webhook_url, webhook_secret FROM companies WHERE id = ?').get(companyId);
-  if (!company?.webhook_url) return;
-  const body = JSON.stringify({ event: 'message.received', ...payload });
-  await fetch(company.webhook_url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Signature': hmacHex(company.webhook_secret, body),
-    },
-    body,
-    signal: AbortSignal.timeout(10000),
-  });
+  if (!company?.webhook_url) return null;
+
+  const body = JSON.stringify({ event, ...payload, sent_at: new Date().toISOString() });
+  const signature = hmacHex(company.webhook_secret, body);
+  const started = Date.now();
+  let statusCode = null;
+  let error = null;
+  let tries = 0;
+
+  for (tries = 1; tries <= attempts; tries += 1) {
+    try {
+      const res = await fetch(company.webhook_url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'User-Agent': 'TeleHub-Webhook/1.0', 'X-Event': event, 'X-Signature': signature },
+        body,
+        signal: AbortSignal.timeout(10000),
+      });
+      statusCode = res.status;
+      if (res.ok) {
+        error = null;
+        break;
+      }
+      error = `HTTP ${res.status}`;
+    } catch (err) {
+      error = err.name === 'TimeoutError' ? 'Tiempo de espera agotado (10s)' : err.message;
+    }
+    if (tries < attempts) await new Promise((r) => setTimeout(r, 1000 * 4 ** (tries - 1)));
+  }
+
+  const info = db.prepare(`
+    INSERT INTO webhook_deliveries (company_id, event, url, status_code, success, attempts, error, duration_ms)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(companyId, event, company.webhook_url, statusCode, error ? 0 : 1, Math.min(tries, attempts), error, Date.now() - started);
+  // Conserva solo las últimas 500 entregas por empresa.
+  db.prepare(`DELETE FROM webhook_deliveries WHERE company_id = ? AND id <= ?`).run(companyId, info.lastInsertRowid - 500);
+  const delivery = db.prepare('SELECT * FROM webhook_deliveries WHERE id = ?').get(info.lastInsertRowid);
+  emitToCompany(companyId, 'delivery', delivery);
+  return delivery;
 }
 
 /* ------------------------------------------------------------------ */
 /* Mensajes salientes                                                  */
 /* ------------------------------------------------------------------ */
+
+function sentFileId(result) {
+  if (!result) return null;
+  if (result.photo) return result.photo[result.photo.length - 1].file_id;
+  return result.document?.file_id || null;
+}
+
+/** Descarga (proxy) el archivo de un mensaje desde Telegram sin exponer el token del bot. */
+async function downloadFile(companyId, messageId) {
+  const m = db.prepare('SELECT * FROM messages WHERE id = ? AND company_id = ?').get(messageId, companyId);
+  if (!m || !m.file_id) throw new TelegramError('Archivo no encontrado', 404);
+  const bot = getBot(m.bot_id);
+  const token = botToken(bot);
+  const file = await callApi(token, 'getFile', { file_id: m.file_id });
+  const res = await fetch(`${API_BASE}/file/bot${token}/${file.file_path}`);
+  if (!res.ok) throw new TelegramError('No se pudo descargar el archivo de Telegram', 502);
+  const ext = file.file_path.split('.').pop().toLowerCase();
+  const byExt = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif', mp4: 'video/mp4', oga: 'audio/ogg', ogg: 'audio/ogg', mp3: 'audio/mpeg', pdf: 'application/pdf' };
+  return {
+    body: Buffer.from(await res.arrayBuffer()),
+    contentType: byExt[ext] || res.headers.get('content-type') || 'application/octet-stream',
+    fileName: m.file_name || file.file_path.split('/').pop(),
+  };
+}
 
 function publicMessage(m) {
   if (!m) return null;
@@ -255,14 +318,15 @@ function publicMessage(m) {
 
 /**
  * Envía un mensaje desde un bot de la empresa.
- * @param {object} opts { type: text|photo|document, text, media_url, parse_mode, reply_to_message_id }
+ * @param {object} opts { type: text|photo|document, text, media_url, file, parse_mode, reply_to_message_id }
+ *   file: archivo subido { buffer, originalname, mimetype } (alternativa a media_url)
  */
 async function sendMessage(companyId, botId, chatId, opts) {
   const bot = db.prepare('SELECT * FROM bots WHERE id = ? AND company_id = ?').get(botId, companyId);
   if (!bot) throw new TelegramError('Bot no encontrado', 404);
   if (chatId === undefined || chatId === null || chatId === '') throw new TelegramError('chat_id es obligatorio');
 
-  const type = opts.type || 'text';
+  const type = opts.type || (opts.file ? (/^image\/(jpeg|png|webp)$/.test(opts.file.mimetype) ? 'photo' : 'document') : 'text');
   const common = {
     chat_id: chatId,
     ...(opts.parse_mode ? { parse_mode: opts.parse_mode } : {}),
@@ -276,9 +340,17 @@ async function sendMessage(companyId, botId, chatId, opts) {
     method = 'sendMessage';
     params = { ...common, text: opts.text };
   } else if (type === 'photo' || type === 'document') {
-    if (!opts.media_url) throw new TelegramError('media_url es obligatorio para fotos y documentos');
+    if (!opts.media_url && !opts.file) throw new TelegramError('Envía media_url o un archivo (file) para fotos y documentos');
     method = type === 'photo' ? 'sendPhoto' : 'sendDocument';
-    params = { ...common, [type]: opts.media_url, ...(opts.text ? { caption: opts.text } : {}) };
+    params = { ...common, ...(opts.text ? { caption: opts.text } : {}) };
+    if (opts.file) {
+      const form = new FormData();
+      for (const [k, v] of Object.entries(params)) form.append(k, typeof v === 'object' ? JSON.stringify(v) : String(v));
+      form.append(type, new Blob([opts.file.buffer], { type: opts.file.mimetype }), opts.file.originalname);
+      params = form;
+    } else {
+      params[type] = opts.media_url;
+    }
   } else {
     throw new TelegramError('type debe ser text, photo o document');
   }
@@ -303,10 +375,11 @@ async function sendMessage(companyId, botId, chatId, opts) {
   }
 
   const info = db.prepare(`
-    INSERT INTO messages (company_id, bot_id, chat_ref, chat_id, direction, type, text, media_url, telegram_message_id, status, error, raw, created_at)
-    VALUES (?, ?, ?, ?, 'out', ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO messages (company_id, bot_id, chat_ref, chat_id, direction, type, text, media_url, file_id, file_name, telegram_message_id, status, error, raw, created_at)
+    VALUES (?, ?, ?, ?, 'out', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     bot.company_id, bot.id, chat?.id ?? null, String(chatId), type, opts.text || null, opts.media_url || null,
+    sentFileId(result), opts.file?.originalname || null,
     result?.message_id ?? null, result ? 'sent' : 'failed', error?.message ?? null, result ? JSON.stringify(result) : null, now,
   );
 
@@ -350,10 +423,13 @@ module.exports = {
   removeBot,
   handleUpdate,
   sendMessage,
+  downloadFile,
+  deliverWebhook,
   publicBot,
   publicMessage,
   getBot,
   bootAllBots,
+  stopAllPolling,
   disconnectCompanyBots,
   connectCompanyBots,
 };

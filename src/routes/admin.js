@@ -1,6 +1,6 @@
 const express = require('express');
 const db = require('../db');
-const { generateApiToken, randomHex } = require('../security');
+const { generateApiToken, randomHex, hashPassword, verifyPassword } = require('../security');
 const { requireAdmin } = require('../auth');
 const telegram = require('../telegram');
 
@@ -28,6 +28,17 @@ function validate(body) {
 }
 
 router.get('/me', (req, res) => res.json(req.admin));
+
+router.post('/password', (req, res) => {
+  const { current_password, new_password } = req.body || {};
+  const admin = db.prepare('SELECT * FROM admins WHERE id = ?').get(req.admin.id);
+  if (!verifyPassword(String(current_password || ''), admin.password_hash)) {
+    return res.status(422).json({ error: 'La contraseña actual es incorrecta' });
+  }
+  if (String(new_password || '').length < 8) return res.status(422).json({ error: 'La nueva contraseña debe tener al menos 8 caracteres' });
+  db.prepare('UPDATE admins SET password_hash = ? WHERE id = ?').run(hashPassword(String(new_password)), admin.id);
+  res.json({ ok: true });
+});
 
 router.get('/stats', (req, res) => {
   const one = (sql) => db.prepare(sql).get().n;
